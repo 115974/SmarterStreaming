@@ -16,7 +16,7 @@ import com.eventhandle.SmartEventCallback;
 
 public class SmartPublisherJni {
 	
-	static class WATERMARK {
+	public static class WATERMARK {
 	   	public static final int WATERMARK_FONTSIZE_MEDIUM 			= 0;
 	   	public static final int WATERMARK_FONTSIZE_SMALL 			= 1;
 	   	public static final int WATERMARK_FONTSIZE_BIG	 			= 2;
@@ -63,7 +63,7 @@ public class SmartPublisherJni {
    public native int SetSmartPublisherVideoHWEncoder(int kbps);
     
     /**
-     * Set Font water-mark
+     * Set Text water-mark
      * 
      * @param fontSize: it should be "MEDIUM", "SMALL", "BIG"
      * 
@@ -75,7 +75,16 @@ public class SmartPublisherJni {
      * 
      * @return {0} if successful
      */
-    public native int SmartPublisherSetFontWatermark(String waterText, int isAppendTime, int fontSize, int waterPostion, int xPading, int yPading);
+    public native int SmartPublisherSetTextWatermark(String waterText, int isAppendTime, int fontSize, int waterPostion, int xPading, int yPading);
+    
+    
+    /**
+     * Set Text water-mark font file name
+     * @param fontFileName:  font full file name,  e.g: /system/fonts/DroidSansFallback.ttf
+	 *
+	 * @return {0} if successful
+     */
+    public native int SmartPublisherSetTextWatermarkFontFileName(String fontFileName);
 	
     /**
      * Set picture water-mark
@@ -94,6 +103,132 @@ public class SmartPublisherJni {
      */
     public native int SmartPublisherSetPictureWatermark(String picPath, int waterPostion, int picWidth, int picHeight, int xPading, int yPading);
     
+    /**
+     * Set gop interval.
+     *
+     * <pre>please set before SmartPublisherStart while after SmartPublisherInit.</pre>
+     *
+     * gopInterval: encode I frame interval, the value always > 0
+     *
+     * @return {0} if successful
+     */
+    public native int SmartPublisherSetGopInterval(int gopInterval);
+    
+    /**
+     * Set software encode video bit-rate.
+     *
+     * <pre>please set before SmartPublisherStart while after SmartPublisherInit.</pre>
+     *
+     * avgBitRate: average encode bit-rate(kbps)
+     * 
+     * maxBitRate: max encode bit-rate(kbps)
+     *
+     * @return {0} if successful
+     */
+    public native int SmartPublisherSetSWVideoBitRate(int avgBitRate, int maxBitRate);
+    
+    /**
+     * Set fps.
+     *
+     * <pre>please set before SmartPublisherStart while after SmartPublisherInit.</pre>
+     *
+     * fps: the fps of video, range with (1,25).
+     *
+     * @return {0} if successful
+     */
+    public native int SmartPublisherSetFPS(int fps);
+    
+	/**
+     * Set software video encoder profile.
+     *
+     * <pre>please set before SmartPublisherStart while after SmartPublisherInit.</pre>
+     *
+     * profile: the software video encoder profile, range with (1,3).
+     * 
+     * 1: baseline profile
+     * 2: main profile
+     * 3: high profile
+     *
+     * @return {0} if successful
+     */
+    public native int SmartPublisherSetSWVideoEncoderProfile(int profile);
+    
+    
+    /**
+     * 
+     * Set software video encoder speed.
+     * 
+     * <pre>please set before SmartPublisherStart while after SmartPublisherInit.</pre>
+     * 
+     * @param speed: range with(1, 6), the default speed is 6. 
+     * 
+     * if with 1, CPU is lowest.
+     * if with 6, CPU is highest.
+     * 
+     * @return {0} if successful
+     */
+    public native int SmartPublisherSetSWVideoEncoderSpeed(int speed);
+	
+     /**
+     * Set Clipping Mode: 设置裁剪模式(仅用于640*480分辨率, 裁剪主要用于移动端宽高适配)
+     *
+     * <pre>please set before SmartPublisherStart while after SmartPublisherInit.</pre>
+     *
+     * @param mode: 0: 非裁剪模式 1:裁剪模式(如不设置, 默认裁剪模式)
+     *
+     * @return {0} if successful
+     */
+    public native int SmartPublisherSetClippingMode(int mode);
+	
+    /**
+     * Set audio encoder type
+     * 
+     * @param type: if with 1:AAC, if with 2: SPEEX
+     * 
+     * @return {0} if successful
+     */
+    public native int SmartPublisherSetAudioCodecType(int type);
+    
+    /**
+     * Set speex encoder quality
+     * 
+     * @param quality: range with (0, 10), default value is 8
+     * 
+     * @return {0} if successful
+     */
+    public native int SmartPublisherSetSpeexEncoderQuality(int quality);
+    
+    
+    /**
+     * Set Audio Noise Suppression
+     * 
+     * @param isNS: if with 1:suppress, if with 0: does not suppress
+     * 
+     * @return {0} if successful
+     */
+    public native int SmartPublisherSetNoiseSuppression(int isNS);
+    
+    
+    /**
+     * Set Audio AGC
+     * 
+     * @param isNS: if with 1:AGC, if with 0: does not AGC
+     * 
+     * @return {0} if successful
+     */
+    public native int SmartPublisherSetAGC(int isAGC);
+    
+    
+    /**
+     * Set Audio Echo Cancellation
+     * 
+     * @param isCancel: if with 1:Echo Cancellation, if with 0: does not cancel
+     * @param delay: echo delay(ms), if with 0, SDK will automatically estimate the delay.
+     * 
+     * @return {0} if successful
+     */
+    public native int SmartPublisherSetEchoCancellation(int isCancel, int delay);
+    
     
     /**
      * Set mute or not during publish stream
@@ -103,6 +238,17 @@ public class SmartPublisherJni {
      * @return {0} if successful
      */
     public native int SmartPublisherSetMute(int isMute);
+    
+    /**
+     * Set mirror
+     * 
+     * @param isMirror: if with 1:mirror mode, if with 0: normal mode
+     * 
+     * Please note when with "mirror mode", the publisher and player with the same echo direction
+     * 
+     * @return {0} if successful
+     */
+    public native int SmartPublisherSetMirror(int isMirror);
     
     /**
      * Set if recorder the stream to local file.
@@ -234,6 +380,20 @@ public class SmartPublisherJni {
 	 */
 	public native int SmartPublisherOnCaptureVideoABGRFlipVerticalData(ByteBuffer data, int rowStride, int width, int height);
 	
+	
+	/**
+	 * Set far end pcm data
+	 * 
+	 * @param pcmdata : 16bit pcm data
+	 * @param sampleRate: audio sample rate
+	 * @param channel: auido channel
+	 * @param per_channel_sample_number: per channel sample numbers
+	 * @param is_low_latency: if with 0, it is not low_latency, if with 1, it is low_latency
+	 * @return {0} if successful
+	 */
+	public native int SmartPublisherOnFarEndPCMData(ByteBuffer pcmdata, int sampleRate, int channel, int per_channel_sample_number, int is_low_latency);
+	
+	
 	/**
 	* Set encoded video data.
 	*
@@ -293,5 +453,40 @@ public class SmartPublisherJni {
 	 */
     public native int SmartPublisherStop();
     
+       
+    /*********增加新的接口 ++ ***************/
+    /* 增加新接口是为了把推送和录像分离, 老的接口依然可用(SmartPublisherStart, SmartPublisherStop), 
+     * 但是不要老接口和新接口混着用，这样结果是未定义的
+    */
+    
+    /**
+	* Start publish stream 
+	*
+	* @return {0} if successful
+	*/
+    public native int SmartPublisherStartPublisher();
+    
+    /**
+   	* Stop publish stream 
+   	*
+   	* @return {0} if successful
+   	*/
+    public native int SmartPublisherStopPublisher();
+    
+    /**
+	* Start recorder
+	*
+	* @return {0} if successful
+	*/
+    public native int SmartPublisherStartRecorder();
+    
+    /**
+   	* Stop recorder 
+   	*
+   	* @return {0} if successful
+   	*/
+    public native int SmartPublisherStopRecorder();
+    
    
+    /*********增加新的接口  -- ***************/      
 }

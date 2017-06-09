@@ -87,15 +87,34 @@ public class CameraPublishActivity extends Activity implements Callback, Preview
 	 * 3: 1280*720
 	 * */
 	private Spinner resolutionSelector;
+	
+	/* video软编码profile设置
+     * 1: baseline profile
+     * 2: main profile
+     * 3: high profile
+	 * */
+	private Spinner swVideoEncoderProfileSelector;
+	
+	private int sw_video_encoder_profile = 1;	//default with baseline profile
 
 	private Spinner recorderSelector;
 	
 	private Button  btnRecoderMgr;
+	private Button  btnNoiseSuppression;
+	private Button  btnAGC;
+	private Button  btnSpeex;
 	private Button  btnMute;
+	private Button  btnMirror;
+	
+	private Spinner swVideoEncoderSpeedSelector;
+	
 	private Button	btnHWencoder;
 	private ImageView imgSwitchCamera;
 	private Button btnInputPushUrl;
 	private Button btnStartStop;
+	
+	private Button btnStartPush;
+	private Button btnStartRecorder;
 	
 	private SurfaceView mSurfaceView = null;  
     private SurfaceHolder mSurfaceHolder = null;  
@@ -106,6 +125,9 @@ public class CameraPublishActivity extends Activity implements Callback, Preview
 	private boolean mPreviewRunning = false; 
 
 	private boolean isStart = false;
+	
+	private boolean isPushing   = false;
+	private boolean isRecording = false;
 	
 	final private String logoPath = "/sdcard/daniulivelogo.png";
 	private boolean isWritelogoFileSuccess = false;
@@ -134,15 +156,26 @@ public class CameraPublishActivity extends Activity implements Callback, Preview
 	
 	private boolean is_need_local_recorder = false;		// do not enable recorder in default
 	
+	private boolean is_noise_suppression = true; 
+	
+	private boolean is_agc = false;
+	
+	private boolean is_speex = false;
+	
 	private boolean is_mute = false;
+	
+	private boolean is_mirror = false;
+	
+	private int sw_video_encoder_speed = 6;
 	
 	private boolean is_hardware_encoder = false;
 	
     private Context myContext; 
     
-    static {
-        System.load("libSmartPublisher.so");
-    }
+	static {  
+		System.loadLibrary("SmartPublisher");
+	}
+  
     
     private byte[] ReadAssetFileDataToByte(InputStream in) throws IOException
     {
@@ -172,32 +205,34 @@ public class CameraPublishActivity extends Activity implements Callback, Preview
 
         myContext = this.getApplicationContext();
         
-        try 
-        {
-        	
-         InputStream logo_input_stream = getClass().getResourceAsStream("/assets/logo.png");	
-         
-         byte[] logo_data = ReadAssetFileDataToByte(logo_input_stream);
-        
-         if ( logo_data != null )
-         {
-        	 try {  
-                 FileOutputStream out = new FileOutputStream(logoPath);
-                 out.write(logo_data);
-                 out.close();                   
-                 isWritelogoFileSuccess = true;
-             } catch (Exception e) 
-        	 {  
-                 e.printStackTrace();  
-                 Log.e(TAG, "write logo file to /sdcard/ failed");
-             }
-         }
-              
-        } catch(Exception e)
-        {
-        	  e.printStackTrace();  
-              Log.e(TAG, "write logo file to /sdcard/ failed");
-        }
+		try {
+
+			InputStream logo_input_stream = getClass().getResourceAsStream(
+					"/assets/logo.png");
+
+			byte[] logo_data = ReadAssetFileDataToByte(logo_input_stream);
+
+			if (logo_data != null)
+			{
+				try 
+				{
+					FileOutputStream out = new FileOutputStream(logoPath);
+					out.write(logo_data);
+					out.close();
+					isWritelogoFileSuccess = true;
+				} catch (Exception e) 
+				{
+					e.printStackTrace();
+					Log.e(TAG, "write logo file to /sdcard/ failed");
+				}
+			}
+
+		} 
+		catch (Exception e) 
+		{
+			e.printStackTrace();
+			Log.e(TAG, "write logo file to /sdcard/ failed");
+		}
           
         //push type, audio/video/audio&video
         pushTypeSelector = (Spinner)findViewById(R.id.pushTypeSelctor);
@@ -213,7 +248,7 @@ public class CameraPublishActivity extends Activity implements Callback, Preview
 			public void onItemSelected(AdapterView<?> parent, View view,
 					int position, long id) {
 				
-				if(isStart)
+				if(isStart || isPushing || isRecording )
 				{
 					Log.e(TAG, "Could not switch push type during publishing..");
 					return;
@@ -248,7 +283,7 @@ public class CameraPublishActivity extends Activity implements Callback, Preview
 			@Override
 			public void onItemSelected(AdapterView<?> parent, View view,
 					int position, long id) {
-				if(isStart)
+				if(isStart || isPushing || isRecording )
 				{
 					Log.e(TAG, "Could not switch water type during publishing..");
 					return;
@@ -279,7 +314,7 @@ public class CameraPublishActivity extends Activity implements Callback, Preview
 			public void onItemSelected(AdapterView<?> parent, View view,
 					int position, long id) {
 				
-				if(isStart)
+				if(isStart|| isPushing || isRecording)
 				{
 					Log.e(TAG, "Could not switch resolution during publishing..");
 					return;
@@ -289,6 +324,36 @@ public class CameraPublishActivity extends Activity implements Callback, Preview
 				
 				SwitchResolution(position);
 		
+			}
+
+			@Override
+			public void onNothingSelected(AdapterView<?> parent) {
+				
+			}
+		});
+        
+        swVideoEncoderProfileSelector = (Spinner)findViewById(R.id.swVideoEncoderProfileSelector);
+        final String []profileSel = new String[]{"BaseLineProfile", "MainProfile", "HighProfile"};
+        ArrayAdapter<String> adapterProfile = new ArrayAdapter<String>(this,
+                android.R.layout.simple_spinner_item, profileSel);
+        adapterProfile.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        swVideoEncoderProfileSelector.setAdapter(adapterProfile);
+
+        swVideoEncoderProfileSelector.setOnItemSelectedListener(new OnItemSelectedListener() {
+
+			@Override
+			public void onItemSelected(AdapterView<?> parent, View view,
+					int position, long id) {
+				
+				if(isStart|| isPushing || isRecording)
+				{
+					Log.e(TAG, "Could not switch video profile during publishing..");
+					return;
+				}
+				
+				Log.i(TAG, "[VideoProfile]Currently choosing: " + profileSel[position]);
+				
+				sw_video_encoder_profile = position + 1;		
 			}
 
 			@Override
@@ -335,9 +400,52 @@ public class CameraPublishActivity extends Activity implements Callback, Preview
         btnRecoderMgr = (Button)findViewById(R.id.button_recoder_manage);
         btnRecoderMgr.setOnClickListener(new ButtonRecorderMangerListener());
         //end
-       
+        
+        btnNoiseSuppression = (Button)findViewById(R.id.button_noise_suppression);
+        btnNoiseSuppression.setOnClickListener(new ButtonNoiseSuppressionListener());
+        
+        btnAGC = (Button)findViewById(R.id.button_agc);
+        btnAGC.setOnClickListener(new ButtonAGCListener());
+        
+        btnSpeex = (Button)findViewById(R.id.button_speex);
+        btnSpeex.setOnClickListener(new ButtonSpeexListener());
+        
         btnMute = (Button)findViewById(R.id.button_mute);
         btnMute.setOnClickListener(new ButtonMuteListener());
+        
+        btnMirror = (Button)findViewById(R.id.button_mirror);
+        btnMirror.setOnClickListener(new ButtonMirrorListener());
+        
+       
+        swVideoEncoderSpeedSelector = (Spinner)findViewById(R.id.sw_video_encoder_speed_selctor);
+        
+        final String [] video_encoder_speed_Sel = new String[]{"6", "5", "4", "3", "2", "1"};
+        ArrayAdapter<String> adapterVideoEncoderSpeed = new ArrayAdapter<String>(this,
+                android.R.layout.simple_spinner_item, video_encoder_speed_Sel);
+        
+        adapterVideoEncoderSpeed.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        swVideoEncoderSpeedSelector.setAdapter(adapterVideoEncoderSpeed);
+        
+        swVideoEncoderSpeedSelector.setOnItemSelectedListener(new OnItemSelectedListener() {
+
+			@Override
+			public void onItemSelected(AdapterView<?> parent, View view,
+					int position, long id)
+			{
+						
+				Log.i(TAG, "Currently speed choosing: " + video_encoder_speed_Sel[position]);
+				
+				sw_video_encoder_speed = 6 - position;
+				
+				Log.i(TAG, "Choose speed=" + sw_video_encoder_speed);
+			}
+
+			@Override
+			public void onNothingSelected(AdapterView<?> parent) {
+				
+			}
+		});
+        
         
         btnHWencoder = (Button)findViewById(R.id.button_hwencoder);
         btnHWencoder.setOnClickListener(new ButtonHardwareEncoderListener());
@@ -350,6 +458,13 @@ public class CameraPublishActivity extends Activity implements Callback, Preview
         
         btnStartStop = (Button)findViewById(R.id.button_start_stop);
         btnStartStop.setOnClickListener(new ButtonStartListener());
+        
+        btnStartPush = (Button)findViewById(R.id.button_start_push);
+        btnStartPush.setOnClickListener(new ButtonStartPushListener());
+        
+        btnStartRecorder = (Button)findViewById(R.id.button_start_recorder);
+        btnStartRecorder.setOnClickListener(new ButtonStartRecorderListener());
+        
         imgSwitchCamera = (ImageView)findViewById(R.id.button_switchCamera);
         imgSwitchCamera.setOnClickListener(new SwitchCameraListener());
         
@@ -424,22 +539,24 @@ public class CameraPublishActivity extends Activity implements Callback, Preview
     {
     	if ( audioRecord_ == null )
 		{
-			audioRecord_ = new NTAudioRecord(this, 1);
+			 audioRecord_ = new NTAudioRecord(this, 1);
 		}
 			
-        if(audioRecord_ != null)
+        if( audioRecord_ != null )
         {
-        	Log.i(TAG, "onCreate, call executeAudioRecordMethod.."); 
-        	audioRecord_.executeAudioRecordMethod();
+        	Log.i(TAG, "onCreate, call executeAudioRecordMethod..");
+        	// auido_ret: 0 ok, other failed
+        	int auido_ret= audioRecord_.executeAudioRecordMethod();
+        	Log.i(TAG, "onCreate, call executeAudioRecordMethod.. auido_ret=" + auido_ret); 
         }
     }
     
     //Configure recorder related function.
-    void ConfigRecorderFuntion()
+    void ConfigRecorderFuntion(boolean isNeedLocalRecorder)
     {
     	if ( libPublisher != null )
     	{
-    		if ( is_need_local_recorder )
+    		if ( isNeedLocalRecorder )
     		{
     			if ( recDir != null && !recDir.isEmpty() )
         		{
@@ -493,10 +610,49 @@ public class CameraPublishActivity extends Activity implements Callback, Preview
     			mCamera = null;
     		}
     		
-    	      Intent intent = new Intent();
-              intent.setClass(CameraPublishActivity.this, RecorderManager.class);
-              intent.putExtra("RecoderDir", recDir);
-              startActivity(intent);
+    	    Intent intent = new Intent();
+            intent.setClass(CameraPublishActivity.this, RecorderManager.class);
+            intent.putExtra("RecoderDir", recDir);
+            startActivity(intent);
+    	}
+    }
+    
+    class ButtonNoiseSuppressionListener  implements OnClickListener
+    {
+    	public void onClick(View v)
+    	{
+    		is_noise_suppression = !is_noise_suppression;
+    		
+    		if ( is_noise_suppression )
+    			btnNoiseSuppression.setText("停用噪音抑制");
+    		else
+    			btnNoiseSuppression.setText("启用噪音抑制");
+    	}
+    }
+    
+    class ButtonAGCListener  implements OnClickListener
+    {
+    	public void onClick(View v)
+    	{
+    		is_agc = !is_agc;
+    		
+    		if ( is_agc )
+    			btnAGC.setText("停用AGC");
+    		else
+    			btnAGC.setText("启用AGC");
+    	}
+    }
+    
+    class ButtonSpeexListener  implements OnClickListener
+    {
+    	public void onClick(View v)
+    	{
+    		is_speex = !is_speex;
+    		
+    		if ( is_speex  )
+    			btnSpeex.setText("不使用Speex");
+    		else
+    			btnSpeex.setText("使用Speex");
     	}
     }
     
@@ -516,6 +672,22 @@ public class CameraPublishActivity extends Activity implements Callback, Preview
     	}
     }
     
+    class ButtonMirrorListener  implements OnClickListener
+    {
+    	public void onClick(View v)
+    	{
+    		is_mirror = !is_mirror;
+    		
+    		if ( is_mirror )
+    			btnMirror.setText("关镜像");
+    		else
+    			btnMirror.setText("开镜像");
+    		
+    		if ( libPublisher != null )
+    			libPublisher.SmartPublisherSetMirror(is_mirror?1:0);
+    	}
+    }
+    
     class ButtonHardwareEncoderListener  implements OnClickListener
     {
     	public void onClick(View v)
@@ -523,9 +695,9 @@ public class CameraPublishActivity extends Activity implements Callback, Preview
     		is_hardware_encoder = !is_hardware_encoder;
     		
     		if ( is_hardware_encoder )
-    			btnHWencoder.setText("软编码");
+    			btnHWencoder.setText("当前硬解码");
     		else
-    			btnHWencoder.setText("硬编码");
+    			btnHWencoder.setText("当前软解码");
     	}
     }
     
@@ -560,6 +732,11 @@ public class CameraPublishActivity extends Activity implements Callback, Preview
                 	 Log.i(TAG, "已生成一个录像文件 : " + param3);
                 	 txt = "已生成一个录像文件。。";
                      break;
+                     
+                 case EVENTID.EVENT_DANIULIVE_ERC_PUBLISHER_SEND_DELAY:
+                	 Log.i(TAG, "发送时延: " + param1 + " 帧数:" + param2);
+                	 txt = "收到发送时延..";
+                	 break;
              }
              
              String str = "当前回调状态：" + txt;
@@ -594,7 +771,8 @@ public class CameraPublishActivity extends Activity implements Callback, Preview
     	Log.i(TAG, "Input publish url:" + url);
     }
     
-    private void PopInputUrlDialog(){
+    private void PopInputUrlDialog()
+    {
     	final EditText inputUrlTxt = new EditText(this);
     	inputUrlTxt.setFocusable(true);
     	inputUrlTxt.setText(baseURL + String.valueOf((int)( System.currentTimeMillis() % 1000000)));
@@ -626,10 +804,21 @@ public class CameraPublishActivity extends Activity implements Callback, Preview
     {
         public void onClick(View v)
         {    
+        	if (isPushing || isRecording )
+        	{
+        		return;
+        	}
+        	
         	if (isStart)
         	{
         		stop();
         		btnRecoderMgr.setEnabled(true);
+        		btnHWencoder.setEnabled(true);
+        		
+        		btnNoiseSuppression.setEnabled(true);
+        		btnAGC.setEnabled(true);
+        		btnSpeex.setEnabled(true);
+        		
         		return;
         	}
         	
@@ -658,7 +847,7 @@ public class CameraPublishActivity extends Activity implements Callback, Preview
 			    textCurURL = (TextView)findViewById(R.id.txtCurURL);
 			    textCurURL.setText(printText);
 				
-			    ConfigRecorderFuntion(); 
+			    ConfigRecorderFuntion(is_need_local_recorder); 
 			    
 			    Log.i(TAG, "videoWidth: "+ videoWidth + " videoHight: " + videoHight + " pushType:" + pushType);
 			    		
@@ -707,11 +896,17 @@ public class CameraPublishActivity extends Activity implements Callback, Preview
 			    	if ( isWritelogoFileSuccess )
 			    		libPublisher.SmartPublisherSetPictureWatermark(path, WATERMARK.WATERMARK_POSITION_TOPRIGHT, 160, 160, 10, 10);
 				    
-			    	libPublisher.SmartPublisherSetFontWatermark(watermarkText, 1, WATERMARK.WATERMARK_FONTSIZE_BIG, WATERMARK.WATERMARK_POSITION_BOTTOMRIGHT, 10, 10);
+			    	libPublisher.SmartPublisherSetTextWatermark(watermarkText, 1, WATERMARK.WATERMARK_FONTSIZE_BIG, WATERMARK.WATERMARK_POSITION_BOTTOMRIGHT, 10, 10);
+			    	
+			    	//libPublisher.SmartPublisherSetTextWatermarkFontFileName("/system/fonts/DroidSansFallback.ttf");
+			    	
+			    	//libPublisher.SmartPublisherSetTextWatermarkFontFileName("/sdcard/DroidSansFallback.ttf");
 			    }
 			    else if(watemarkType == 2)
 			    {
-				    libPublisher.SmartPublisherSetFontWatermark(watermarkText, 1, WATERMARK.WATERMARK_FONTSIZE_BIG, WATERMARK.WATERMARK_POSITION_BOTTOMRIGHT, 10, 10);
+				    libPublisher.SmartPublisherSetTextWatermark(watermarkText, 1, WATERMARK.WATERMARK_FONTSIZE_BIG, WATERMARK.WATERMARK_POSITION_BOTTOMRIGHT, 10, 10);
+				    
+				    //libPublisher.SmartPublisherSetTextWatermarkFontFileName("/system/fonts/DroidSansFallback.ttf");
 			    }
 			    else
 			    {
@@ -720,9 +915,36 @@ public class CameraPublishActivity extends Activity implements Callback, Preview
 			    //end
 			    
 			    
+			    if ( !is_speex )
+			    {
+			    	 // set AAC encoder
+			    	 libPublisher.SmartPublisherSetAudioCodecType(1);
+			    }
+			    else
+			    {
+			    	// set Speex encoder
+			    	libPublisher.SmartPublisherSetAudioCodecType(2);
+			    	libPublisher.SmartPublisherSetSpeexEncoderQuality(8);
+			    }
+			    
+			    libPublisher.SmartPublisherSetNoiseSuppression(is_noise_suppression?1:0);
+			    
+			    libPublisher.SmartPublisherSetAGC(is_agc?1:0);
+			    
+			    //libPublisher.SmartPublisherSetClippingMode(0);
+			    
+				libPublisher.SmartPublisherSetSWVideoEncoderProfile(sw_video_encoder_profile);
+				
+				libPublisher.SmartPublisherSetSWVideoEncoderSpeed(sw_video_encoder_speed);
+							    
 			    //libPublisher.SetRtmpPublishingType(0);
 			    
-					        
+				
+			    //libPublisher.SmartPublisherSetGopInterval(40);
+			    
+			    //libPublisher.SmartPublisherSetFPS(15);
+			    			        
+			    //libPublisher.SmartPublisherSetSWVideoBitRate(600, 1200);
 			    // IF not set url or url is empty, it will not publish stream
 			   // if ( libPublisher.SmartPublisherSetURL("") != 0 )
 			    if ( libPublisher.SmartPublisherSetURL(publishURL) != 0 )
@@ -738,6 +960,11 @@ public class CameraPublishActivity extends Activity implements Callback, Preview
             	else
             	{
             		btnRecoderMgr.setEnabled(false);
+            		btnHWencoder.setEnabled(false);
+            		
+            		btnNoiseSuppression.setEnabled(false);
+            		btnAGC.setEnabled(false);
+            		btnSpeex.setEnabled(false);
             	}
 			}
 			
@@ -756,6 +983,282 @@ public class CameraPublishActivity extends Activity implements Callback, Preview
         }
     };
     
+    
+    private void ConfigControlEnable(boolean isEnable)
+    {
+    	btnRecoderMgr.setEnabled(isEnable);
+		btnHWencoder.setEnabled(isEnable);
+		
+		btnNoiseSuppression.setEnabled(isEnable);
+		btnAGC.setEnabled(isEnable);
+		btnSpeex.setEnabled(isEnable);
+    }
+    
+    private void InitAndSetConfig()
+    {
+		Log.i(TAG, "videoWidth: " + videoWidth + " videoHight: " + videoHight
+				+ " pushType:" + pushType);
+
+		int audio_opt = 1;
+		int video_opt = 1;
+
+		if (pushType == 1) 
+		{
+			video_opt = 0;
+		} 
+		else if (pushType == 2)
+		{
+			audio_opt = 0;
+		}
+
+		libPublisher.SmartPublisherInit(myContext, audio_opt, video_opt,
+				videoWidth, videoHight);
+
+		if (is_hardware_encoder) 
+		{
+			int hwHWKbps = setHardwareEncoderKbps(videoWidth, videoHight);
+
+			Log.i(TAG, "hwHWKbps: " + hwHWKbps);
+
+			int isSupportHWEncoder = libPublisher
+					.SetSmartPublisherVideoHWEncoder(hwHWKbps);
+
+			if (isSupportHWEncoder == 0) {
+				Log.i(TAG, "Great, it supports hardware encoder!");
+			}
+		}
+
+		libPublisher.SetSmartPublisherEventCallback(new EventHande());
+
+		// 如果想和时间显示在同一行，请去掉'\n'
+		String watermarkText = "大牛直播(daniulive)\n\n";
+
+		String path = logoPath;
+
+		if (watemarkType == 0)
+		{
+			if (isWritelogoFileSuccess)
+				libPublisher.SmartPublisherSetPictureWatermark(path,
+								WATERMARK.WATERMARK_POSITION_TOPRIGHT, 160,
+								160, 10, 10);
+			
+		} 
+		else if (watemarkType == 1)
+		{
+			if (isWritelogoFileSuccess)
+				libPublisher.SmartPublisherSetPictureWatermark(path,
+								WATERMARK.WATERMARK_POSITION_TOPRIGHT, 160,
+								160, 10, 10);
+
+			libPublisher.SmartPublisherSetTextWatermark(watermarkText, 1,
+					WATERMARK.WATERMARK_FONTSIZE_BIG,
+					WATERMARK.WATERMARK_POSITION_BOTTOMRIGHT, 10, 10);
+
+			// libPublisher.SmartPublisherSetTextWatermarkFontFileName("/system/fonts/DroidSansFallback.ttf");
+
+			// libPublisher.SmartPublisherSetTextWatermarkFontFileName("/sdcard/DroidSansFallback.ttf");
+		} 
+		else if (watemarkType == 2)
+		{
+			libPublisher.SmartPublisherSetTextWatermark(watermarkText, 1,
+					WATERMARK.WATERMARK_FONTSIZE_BIG,
+					WATERMARK.WATERMARK_POSITION_BOTTOMRIGHT, 10, 10);
+
+			// libPublisher.SmartPublisherSetTextWatermarkFontFileName("/system/fonts/DroidSansFallback.ttf");
+		} else 
+		{
+			Log.i(TAG, "no watermark settings..");
+		}
+		// end
+
+		if (!is_speex) 
+		{
+			// set AAC encoder
+			libPublisher.SmartPublisherSetAudioCodecType(1);
+		} 
+		else
+		{
+			// set Speex encoder
+			libPublisher.SmartPublisherSetAudioCodecType(2);
+			libPublisher.SmartPublisherSetSpeexEncoderQuality(8);
+		}
+
+		libPublisher.SmartPublisherSetNoiseSuppression(is_noise_suppression ? 1
+				: 0);
+
+		libPublisher.SmartPublisherSetAGC(is_agc ? 1 : 0);
+
+		// libPublisher.SmartPublisherSetClippingMode(0);
+
+		libPublisher.SmartPublisherSetSWVideoEncoderProfile(sw_video_encoder_profile);
+		
+		libPublisher.SmartPublisherSetSWVideoEncoderSpeed(sw_video_encoder_speed);
+
+		// libPublisher.SetRtmpPublishingType(0);
+
+		// libPublisher.SmartPublisherSetGopInterval(40);
+
+		// libPublisher.SmartPublisherSetFPS(15);
+
+		// libPublisher.SmartPublisherSetSWVideoBitRate(600, 1200);
+    }
+    
+    
+    class ButtonStartPushListener implements OnClickListener
+    {
+        public void onClick(View v)
+        {    
+        	if ( isStart )
+        	{
+        		return;
+        	}
+        	
+        	if ( isPushing )
+        	{
+        		stopPush();
+        		
+        		if ( !isRecording )
+        		{
+        			ConfigControlEnable(true);
+        		}
+        		
+        		btnStartPush.setText(" 推送");
+        		
+        		isPushing = false;
+        		
+        		return;
+        	}
+        	
+        	
+        	Log.i(TAG, "onClick start push..");   
+        	
+        	if( libPublisher == null )
+        		return;
+        	
+        	isPushing = true;
+        	
+        	if ( !isRecording )
+        	{
+        		InitAndSetConfig();
+        	}
+        	
+            if ( inputPushURL != null && inputPushURL.length() > 1 )
+			{
+				publishURL = inputPushURL;
+				Log.i(TAG, "start, input publish url:" + publishURL);
+			}
+			else
+			{
+				publishURL = baseURL + String.valueOf((int)( System.currentTimeMillis() % 1000000)); 
+				Log.i(TAG, "start, generate random url:" + publishURL);
+			}
+				
+			printText = "URL:" + publishURL;
+			        
+			Log.i(TAG, printText);
+			     
+			if ( libPublisher.SmartPublisherSetURL(publishURL) != 0 )
+			{
+			    Log.e(TAG, "Failed to set publish stream URL..");
+			}
+						
+            int startRet = libPublisher.SmartPublisherStartPublisher();
+            if( startRet != 0)
+            {
+            	isPushing = false;
+            	
+            	Log.e(TAG, "Failed to start push stream..");
+            	return;
+            }
+           
+            if ( !isRecording )
+            {
+            	if( pushType == 0 || pushType ==1 )
+      			{
+      				CheckInitAudioRecorder();	//enable pure video publisher..
+      			}
+            }
+            
+            if ( !isRecording )
+            {
+            	ConfigControlEnable(false);
+            }
+            
+            textCurURL = (TextView)findViewById(R.id.txtCurURL);
+			textCurURL.setText(printText);
+				
+			btnStartPush.setText(" 停止推送 ");
+        }
+        
+    };
+    
+    class ButtonStartRecorderListener implements OnClickListener
+    {
+        public void onClick(View v)
+        {
+        	if ( isStart )
+        	{
+        		return;
+        	}
+        	
+        	if ( isRecording )
+        	{
+        		stopRecorder();
+        		
+        		if ( !isPushing )
+        		{
+        			ConfigControlEnable(true);
+        		}
+        		
+        		btnStartRecorder.setText(" 录像");
+        		
+        		isRecording = false;
+        		
+        		return;
+        	}
+        	
+        	
+        	Log.i(TAG, "onClick start recorder..");   
+        	
+        	if( libPublisher == null )
+        		return;
+        	
+        	isRecording = true;
+        	
+        	if ( !isPushing )
+        	{
+        		InitAndSetConfig();
+        	}
+        	
+        	ConfigRecorderFuntion(true);
+        	
+            int startRet = libPublisher.SmartPublisherStartRecorder();
+            if( startRet != 0 )
+            {
+            	isRecording = false;
+            	
+            	Log.e(TAG, "Failed to start recorder.");
+            	return;
+            }
+           
+            if ( !isPushing )
+            {
+            	if( pushType == 0 || pushType ==1 )
+      			{
+      				CheckInitAudioRecorder();	//enable pure video publisher..
+      			}
+            }
+            
+            if ( !isPushing )
+            {
+            	ConfigControlEnable(false);
+            }
+            				
+            btnStartRecorder.setText(" 停止录像");
+        }
+    };
+    
+    
     private void stop()
     {
     	Log.i(TAG, "onClick stop..");
@@ -763,9 +1266,46 @@ public class CameraPublishActivity extends Activity implements Callback, Preview
     	isStart = false;
     	btnStartStop.setText(" 开始推流 ");
     }
+    
+    private void stopPush()
+    {
+    	if ( !isRecording )
+    	{
+    		if( audioRecord_ != null )
+ 	        {
+ 				Log.i(TAG, "stopPush, call audioRecord_.StopRecording.."); 
+ 	        	audioRecord_.StopRecording();
+ 	        	audioRecord_ = null;
+ 	        }
+    	}
+    	
+    	 if ( libPublisher != null )
+    	 {
+    		libPublisher.SmartPublisherStopPublisher();
+    	 }
+    }
+    
+    private void stopRecorder()
+    {
+    	if ( !isPushing )
+    	{
+    		if( audioRecord_ != null )
+ 	        {
+ 				Log.i(TAG, "stopRecorder, call audioRecord_.StopRecording.."); 
+ 	        	audioRecord_.StopRecording();
+ 	        	audioRecord_ = null;
+ 	        }
+    	}
+    	
+    	if ( libPublisher != null )
+    	{
+    	   libPublisher.SmartPublisherStopRecorder();
+    	}
+    }
 
 	@Override
-    protected  void onDestroy(){
+    protected  void onDestroy()
+	{
     	Log.i(TAG, "activity destory!");
     	
     	if ( isStart )
@@ -773,6 +1313,22 @@ public class CameraPublishActivity extends Activity implements Callback, Preview
     		isStart = false;
     		StopPublish();
     		Log.i(TAG, "onDestroy StopPublish");
+    	}
+    	
+    	if ( isPushing || isRecording )
+    	{
+    		if( audioRecord_ != null )
+ 	        {
+ 				Log.i(TAG, "surfaceDestroyed, call StopRecording.."); 
+ 	        	audioRecord_.StopRecording();
+ 	        	audioRecord_ = null;
+ 	        }
+    		
+    		stopPush();
+    		stopRecorder();
+    		
+    		isPushing = false;
+    		isRecording = false;
     	}
     	
     	super.onDestroy();
@@ -921,11 +1477,11 @@ public class CameraPublishActivity extends Activity implements Callback, Preview
             super.onConfigurationChanged(newConfig);  
         	Log.i(TAG, "onConfigurationChanged, start:" + isStart);
             if (this.getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE) { 
-            	if(!isStart) {
+            	if(!isStart && !isPushing && !isRecording) {
             		currentOrigentation = LANDSCAPE;
 				}
             } else if (this.getResources().getConfiguration().orientation == Configuration.ORIENTATION_PORTRAIT) {
-            	if(!isStart) {
+            	if(!isStart && !isPushing && !isRecording ) {
             		currentOrigentation = PORTRAIT;
 				}
             }  
@@ -951,10 +1507,11 @@ public class CameraPublishActivity extends Activity implements Callback, Preview
 		} 
 		else 
 		{
-			if(isStart)
+			if(isStart|| isPushing || isRecording)
 			{
 				libPublisher.SmartPublisherOnCaptureVideoData(data, data.length, currentCameraType, currentOrigentation);	
 			}
+			
 			camera.addCallbackBuffer(data);
 		}
 	} 

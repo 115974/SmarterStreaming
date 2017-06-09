@@ -28,16 +28,20 @@
     NSString        *copyRights;
     UILabel         *textModeLabel;             //文字提示
     Boolean         is_audio_only_;
+    Boolean         is_fast_startup_;           //是否快速启动模式
+    NSInteger       buffer_time_;               //buffer时间
     Boolean         is_hardware_decoder_;       //默认软解码
     Boolean         is_rtsp_tcp_mode_;          //仅用于rtsp流，设置TCP传输模式
     NSInteger       screenWidth;
     NSInteger       screenHeight;
     NSInteger       playerHeight;
     Boolean         is_mute;                    //静音接口
+    Boolean         is_switch_url;              //切换url
     
     UIButton        *backSettingsButton;        //返回按钮
     UILabel         *backSettingLable;          //返回按钮 lable
     UIButton        *muteButton;                //静音 取消静音
+    UIButton        *switchUrlButton;           //切换url按钮
     
 }
 
@@ -74,15 +78,21 @@
     {
         NSLog(@"[event]收不到RTMP数据..");
     }
+    else if (nID == EVENT_DANIULIVE_ERC_PLAYER_SWITCH_URL)
+    {
+        NSLog(@"[event]快速切换url..");
+    }
     else
         NSLog(@"[event]nID:%lx", (long)nID);
     
     return 0;
 }
 
-
-- (instancetype)initParameter:(NSString*)url isHalfScreen:(Boolean)isHalfScreenVal isAudioOnly:(Boolean)isAudioOnly
-                isHWDecoder:(Boolean)isHWDecoder isRTSPTcpMode:(Boolean)isRTSPTcpMode
+- (instancetype)initParameter:(NSString*)url isHalfScreen:(Boolean)isHalfScreenVal
+                   bufferTime:(NSInteger)bufferTime
+                isFastStartup:(Boolean)isFastStartup
+                  isHWDecoder:(Boolean)isHWDecoder
+                isRTSPTcpMode:(Boolean)isRTSPTcpMode
 {
     self = [super init];
     if (!self) {
@@ -91,7 +101,8 @@
     else if(self) {
         _streamUrl = url;
         is_half_screen_ = isHalfScreenVal;
-        is_audio_only_ = isAudioOnly;
+        is_fast_startup_ = isFastStartup;
+        buffer_time_ = bufferTime;
         is_hardware_decoder_ = isHWDecoder;
         is_rtsp_tcp_mode_ = isRTSPTcpMode;
     }
@@ -101,12 +112,15 @@
 
 - (void)loadView
 {
-    copyRights = @"Copyright 2015~2017 www.daniulive.com v1.0.17.0301";
+    copyRights = @"Copyright 2015~2017 www.daniulive.com v1.0.17.0421";
     
     is_mute = NO;
     
+    is_switch_url = NO;
+    
+    is_audio_only_ = NO;
+    
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(orientChange:)name:UIDeviceOrientationDidChangeNotification object:nil];
-
     
     //当前屏幕宽高
     screenWidth  = CGRectGetWidth([UIScreen mainScreen].bounds);
@@ -175,11 +189,14 @@
         return;
     }
     
-    NSInteger bufferTime = 200;
+    if(buffer_time_>0)
+    {
+        [_player SmartPlayerSetBuffer:buffer_time_];
+    }
     
-    [_player SmartPlayerSetBuffer:bufferTime];
+    [_player SmartPlayerSetFastStartup:is_fast_startup_];
     
-    NSLog(@"playback URL: %@", _streamUrl);
+    NSLog(@"playback URL: %@, is_fast_startup_:%d, buffer_time_:%ld", _streamUrl, is_fast_startup_, (long)buffer_time_);
     
     [_player SmartPlayerSetPlayURL:_streamUrl];
     
@@ -189,7 +206,7 @@
 
     CGFloat lineWidth = muteButton.frame.size.width * 0.12f;
     
-    //muteButton
+    //静音按钮
     muteButton = [UIButton buttonWithType:UIButtonTypeCustom];
     muteButton.frame = CGRectMake(45, playerHeight - 200, 120, 80);
     muteButton.center = CGPointMake(self.view.frame.size.width / 6, muteButton.frame.origin.y + muteButton.frame.size.height / 2);
@@ -204,7 +221,22 @@
     [muteButton addTarget:self action:@selector(MuteBtn:) forControlEvents:UIControlEventTouchUpInside];
     [self.view addSubview:muteButton];
     
-    //muteButton
+    //切换URL按钮
+    switchUrlButton = [UIButton buttonWithType:UIButtonTypeCustom];
+    switchUrlButton.frame = CGRectMake(45, playerHeight - 140, 120, 80);
+    switchUrlButton.center = CGPointMake(self.view.frame.size.width / 6, switchUrlButton.frame.origin.y + switchUrlButton.frame.size.height / 2);
+    
+    switchUrlButton.layer.cornerRadius = muteButton.frame.size.width / 2;
+    switchUrlButton.layer.borderColor = [UIColor greenColor].CGColor;
+    switchUrlButton.layer.borderWidth = lineWidth;
+    
+    [switchUrlButton setTitleColor:[UIColor greenColor] forState:UIControlStateNormal];
+    [switchUrlButton setTitle:@"切换URL2" forState:UIControlStateNormal];
+    
+    [switchUrlButton addTarget:self action:@selector(SwitchUrlBtn:) forControlEvents:UIControlEventTouchUpInside];
+    [self.view addSubview:switchUrlButton];
+    
+    //返回按钮
     backSettingsButton = [UIButton buttonWithType:UIButtonTypeCustom];
     backSettingsButton.frame = CGRectMake(45, playerHeight - 80, 120, 80);
     backSettingsButton.center = CGPointMake(self.view.frame.size.width / 6, backSettingsButton.frame.origin.y + backSettingsButton.frame.size.height / 2);
@@ -251,6 +283,27 @@
         }
         
         [_player SmartPlayerSetMute:is_mute];
+    }
+}
+
+
+- (void)SwitchUrlBtn:(id)sender {
+    if ( _player != nil )
+    {
+        is_switch_url = !is_switch_url;
+        
+        if ( is_switch_url )
+        {
+            _streamUrl = @"rtmp://live.hkstv.hk.lxdns.com/live/hks";
+            [switchUrlButton setTitle:@"切换URL2" forState:UIControlStateNormal];
+        }
+        else
+        {
+            _streamUrl = @"rtmp://live.hkstv.hk.lxdns.com/live/hks";
+            [switchUrlButton setTitle:@"切换URL1" forState:UIControlStateNormal];
+        }
+        
+        [_player SmartPlayerSwitchPlaybackUrl:_streamUrl];
     }
 }
 
